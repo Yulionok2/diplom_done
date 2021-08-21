@@ -1,96 +1,85 @@
-from pprint import pprint
 import json
 import requests
+import os
 import time
-import tqdm
-
-for i in VKPhoto(range(10)):
-    sleep(.01)
+from tqdm import tqdm
 
 class VKPhoto:
-    def __init__(self):
-        self.token_Ya = input(str('Введите ваш API-token Yandex: '))
-        self.token_VK = input(str('Введите ваш API-token VK: '))
-        self.id = input(str('Введите ваш ID VK: '))
-        self.folder = input(str('Название папки в которой будут сохранены фотографии на Яндекс.Диске: '))
-        self.headers_Ya = {'Content - Type': 'application/json',
-                           'Authorization': self.token_Ya}
+  def __init__(self):
+    self.token_VK = input(str('Введите ваш API-token VK: '))
+    self.id = input(str('Введите ваш ID VK: '))
+    self.token_Ya = input(str('Введите ваш API-token Yandex: '))
+    self.file_path = input(str('Названиее папки в котрой будут фото: '))
 
-    def list_photo(self):
-        """
-        Параметры album_id:
-        wall — фотографии со стены;
-        profile — фотографии профиля;
-        saved — сохраненные фотографии. Возвращается только с ключом доступа пользователя.
-        """
-        url = 'https://api.vk.com/method/photos.get'
-        params = {'access_token': self.token_VK,
-                  'owner_id': self.id,
-                  'album_id': 'profile',
-                  'extended': '1',
-                  'count': '5',
-                  'v': '5.131'
-                 }
-        res = requests.get(url, params=params).json()
-        res.raise_for_status()
-        if res.status_code == 201:
-            pprint('Запрос отправлен на сервис VK')
-        else:
-            pprint('Ошибка! Проверьте правильность введенных параметров')
-        res = res['response']['items']
-        list_photo = []
-        for photo in res:
-            list_photo.append({'likes': photo['likes']['count'],
-                               'url': photo['sizes'][-1]['url'],
-                               'size': photo['sizes'][-1]['type'],
-                               'date_upload': photo['date']})
-        sort_photo = sorted(list_photo, key=lambda x: x['likes'])
-        dict_photo = {}
-        photo_list_1 = []
-        for photo in sort_photo:
-            likes = photo['likes']
-            size = photo['size']
-            if f'{likes}.jpg' not in list(dict_photo.keys()):
-                file_name = f'{likes}.jpg'
-                dict_photo[file_name] = photo['url']
-            else:
-                photo_1 = str(likes) + str(photo['date_upload'])
-                file_name = f'{photo_1}.jpg'
-                dict_photo[file_name] = photo['url']
-            photo_list_1.append({'file_name': file_name, 'size': size})
-        with open('VKphoto.json', 'w', encoding='utf-8') as file:
-            file.write(json.dumps(photo_list_1))
-        pprint('Фотографии сохранены в json-файл')
-        return pprint()
+  def creating_a_directory(self):
+    os.mkdir(self.file_path)
 
-    def create_a_folder(self):
-        upload_url = "https://cloud-api.yandex.net/v1/disk/resources"
-        params = {"path": f'disk/{self.folder}'}
-        response = requests.put(upload_url, params=params)
-        response.raise_for_status()
-        if response.status_code == 201:
-            pprint(f'Папка {self.folder} на Яндекс.Диске создана')
-        else:
-            pprint('Ошибка! Проверьте правильность введенных данных')
-        return response.json()
+  def _get_photos_from_folder(self) -> list:
+    file_list = os.listdir(self.file_path)
+    return file_list
 
-    def get_upload_link(self):
-        url = 'https://cloud-api.yandex.net/v1/disk/resources/upload'
-        headers = self.headers_Ya
-        params = {"path": self.create_a_folder(), "overwrite": "true"}
-        res = requests.get(url, headers=headers, params=params)
-        return res.json()
+  def list_photo(self):
+    """
+    Параметры album_id:
+    wall — фотографии со стены;
+    profile — фотографии профиля;
+    saved — сохраненные фотографии. Возвращается только с ключом доступа пользователя.
+    """
+    url = 'https://api.vk.com/method/photos.get'
+    params = {'access_token': self.token_VK,
+              'owner_id': self.id,
+              'album_id': 'profile',
+              'extended': '1',
+              'count': '5',
+              'v': '5.131'
+              }
+    response = requests.get(url, params=params).json()
+    list_photo = response["response"]["items"]
+    for file in tqdm(list_photo):
+      time.sleep(3)
+      self.size = file['sizes'][-1]['type']
+      photo_url = file['sizes'][-1]['url']
+      file_name = file['likes']['count']
+      download_photo = requests.get(photo_url)
+      with open(f'{self.file_path}/{file_name}.jpg', 'wb') as f:
+        f.write(download_photo.content)
 
-    def upload_YA(self):
-        href = self.get_upload_link().get("href", "")
-        response = requests.post(href, data=open('VKphoto.json', 'rb'))
-        response.raise_for_status()
-        if response.status_code == 201:
-            print("Фотографии успешно загружены")
-        else:
-            print('Ошибка при загрузке фотографий')
+  def create_a_folder(self):
+    upload_url = "https://cloud-api.yandex.net/v1/disk/resources"
+    headers = {'Content-Type': 'application/json',
+            'Authorization': self.token_Ya}
+    params = {"path": self.file_path}
+    response = requests.put(upload_url, headers = headers, params=params)
+  
+  def photos_upload(self):
+    headers = {'Content-Type': 'application/json',
+            'Authorization': self.token_Ya
+            }
+    log_list = []
+    for photo in tqdm(self._get_photos_from_folder()):
+      time.sleep(3)
+      url = 'https://cloud-api.yandex.net/v1/disk/resources/upload'
+      params = {'path': f'{self.file_path}/{photo}'}
+      get_upload_url = requests.get(url, headers=headers, params=params)
+      get_url = get_upload_url.json()
+      upload_url = get_url['href']
+      file_upload = requests.put(upload_url, data=open(f'{self.file_path}/{photo}', 'rb'), headers=headers)
+      status = file_upload.status_code
+
+      download_log = {'file_name': photo, 'size': self.size}
+      log_list.append(download_log)
+
+    with open('VKphoto.json', 'a') as file:
+      json.dump(log_list, file, indent=2)
+    if 500 > status != 400:
+      print('Фотографии успешно загружены!')
+    else:
+      print('Ошибка при загрузке фотографий')
 
 
 Apivk = VKPhoto()
+Apivk.creating_a_directory()
+Apivk._get_photos_from_folder()
 Apivk.list_photo()
-Apivk.upload_YA()
+Apivk.create_a_folder()
+Apivk.photos_upload()
